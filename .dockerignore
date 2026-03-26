@@ -1,0 +1,9 @@
+build/
+.git
+.gitignore
+*.log
+.env
+**/__pycache__
+**/*.pyc
+.cursor
+*.md

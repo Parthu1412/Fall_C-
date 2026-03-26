@@ -1,0 +1,13 @@
+{
+  "name": "fall-detection-cpp",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "cppzmq",
+    "nlohmann-json",
+    "redis-plus-plus",
+    "librdkafka",
+    "curl",
+    { "name": "simpleamqpclient", "features": ["ssl"] },
+    { "name": "aws-sdk-cpp", "default-features": false, "features": ["s3"] }
+  ]
+}
