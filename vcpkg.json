@@ -7,7 +7,6 @@
     "redis-plus-plus",
     "librdkafka",
     "curl",
-    { "name": "simpleamqpclient", "features": ["ssl"] },
     { "name": "aws-sdk-cpp", "default-features": false, "features": ["s3"] }
   ]
 }

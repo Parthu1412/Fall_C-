@@ -4,6 +4,8 @@
 #include "../../config.hpp"
 #include <ATen/Context.h>
 #include <c10/core/ScalarType.h>
+#include <torch/nn/functional.h>
+#include <torch/cuda.h>
 #include <opencv2/dnn.hpp>
 #include <chrono>
 #include <cstdlib>
@@ -65,7 +67,7 @@ torch::Tensor PoseInference::preprocess_(const cv::Mat& frame) const {
         t,
         torch::nn::functional::InterpolateFuncOptions()
             .size(std::vector<int64_t>{new_h, new_w})
-            .mode(torch::kBilinear)
+            .mode(torch::enumtype::kBilinear{})
             .align_corners(false)
     );
 
