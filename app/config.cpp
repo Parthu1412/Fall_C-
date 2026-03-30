@@ -1,3 +1,7 @@
+// Application configuration — loads all runtime settings from environment
+// variables (camera list, ZMQ ports, thresholds, client type, S3/Kafka/RabbitMQ
+// connection details) into the AppConfig singleton used across all three processes.
+
 #include "config.hpp"
 
 #include <cstdlib>

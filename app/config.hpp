@@ -1,3 +1,8 @@
+// Interface for application configuration.
+// Declares AppConfig (singleton) and CameraConfig, which hold all settings
+// read from environment variables at startup: camera URLs, ZMQ ports, fall
+// detection thresholds, frame buffer sizes, and integration credentials.
+
 #pragma once
 
 #include <string>

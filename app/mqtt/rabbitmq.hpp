@@ -1,3 +1,7 @@
+// RabbitMQ client — publishes fall-event notification messages to a RabbitMQ
+// exchange via AMQP. Uses SimpleAmqpClient and reconnects automatically on
+// connection loss, matching the Python mqtt/rabitmq.py behaviour.
+
 #pragma once
 
 #include <SimpleAmqpClient/SimpleAmqpClient.h>
@@ -20,11 +24,9 @@ public:
     RabbitMQClient() {
         auto& config = app::config::AppConfig::getInstance();
         max_retries_ = config.max_retries;
-        // Match Python: __init__ does not auto-connect.
-        // Caller must explicitly call connect_with_retry() (Python: connect_rabbitmq_with_retry()).
     }
 
-    // Match Python: _open_connection() — creates a single attempt channel
+    // Creates a single attempt channel
     // Throws on failure (caller handles retry).
     void connect() {
         auto& config = app::config::AppConfig::getInstance();
@@ -34,7 +36,7 @@ public:
         }
         if (config.rabbitmq_use_ssl) {
             try {
-                // TLS for AWS MQ: CERT_NONE (matches Python ssl.CERT_NONE)
+                // TLS for AWS MQ: CERT_NONE
                 const char* ca_path = "/etc/ssl/certs/ca-certificates.crt";
                 channel_ = AmqpClient::Channel::CreateSecure(
                     ca_path,
@@ -44,7 +46,7 @@ public:
                     config.rabbitmq_user,
                     config.rabbitmq_pass,
                     "/", 131072,
-                    false  // verify_hostname_and_peer = false (match Python CERT_NONE)
+                    false  // verify_hostname_and_peer = false 
                 );
             } catch (const std::exception& e) {
                 std::string err(e.what());
@@ -70,7 +72,7 @@ public:
             std::to_string(config.rabbitmq_port) + (config.rabbitmq_use_ssl ? " (SSL)" : ""));
     }
 
-    // Match Python: connect_rabbitmq_with_retry() — retries up to max_retries, then exits
+    // Retries up to max_retries, then exits
     void connect_with_retry() {
         auto& config = app::config::AppConfig::getInstance();
         int retry_count = 0;
@@ -88,16 +90,16 @@ public:
                     std::this_thread::sleep_for(std::chrono::seconds(5));  // Match Python retry_delay=5
             }
         }
-        // Match Python: sys.exit(1) after max retries
+        // Sys.exit(1) after max retries
         app::utils::Logger::error("[RabbitMQ] Max retries reached. Exiting application.");
         std::exit(1);
     }
 
     bool is_connected() const { return channel_ != nullptr; }
 
-    // Match Python: publish_message() — reconnects with retry on stale connection, retries publish once
+    // Reconnects with retry on stale connection, retries publish once
     void publish(const std::string& queue_name, const app::utils::FallMessage& message) {
-        // Match Python: check if connection needs to be established
+        // Check if connection needs to be established
         if (!channel_) {
             app::utils::Logger::warning("[RabbitMQ] Cannot publish, channel is null. Reconnecting...");
             connect_with_retry();
@@ -116,7 +118,7 @@ public:
                 " to queue: " + queue_name);
 
         } catch (const std::exception& e) {
-            // Match Python: stale connection — reconnect and retry once
+            // Stale connection — reconnect and retry once
             app::utils::Logger::warning("[RabbitMQ] Publish failed (stale connection), reconnecting and retrying | error=" +
                 std::string(e.what()) + " | queue=" + queue_name);
             channel_ = nullptr;
@@ -133,7 +135,7 @@ public:
     }
 
     void close() {
-        // Match Python: close() — release channel
+        // close() — release channel
         channel_ = nullptr;
         app::utils::Logger::info("[RabbitMQ] Connection closed");
     }

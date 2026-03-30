@@ -1,3 +1,7 @@
+// Redis client helper — reads pre-computed pose keypoints published by the
+// centralized-yolo Redis producer into the frame pipeline, enabling
+// CLIENT_TYPE=redis mode where C++ skips local pose inference entirely.
+
 #pragma once
 
 #include <sw/redis++/redis++.h>
@@ -105,15 +109,15 @@ public:
             return result;
         } catch (const Error& e) {
             app::utils::Logger::error("[RedisConsumer] Error reading from Redis: " + std::string(e.what()));
-            // Match Python RedisManager: attempt one reconnect on connection error
+            // Attempt one reconnect on connection error
             try { reconnect(); } catch (...) {}
             result.ok = false;
             return result;
-        }
+        } 
     }
 
     void reconnect() {
-        // Match Python RedisManager.reconnect(): release and recreate connection
+        // Release and recreate connection
         try {
             auto& config = app::config::AppConfig::getInstance();
             ConnectionOptions opts;
@@ -182,7 +186,6 @@ private:
         }
 
         double elapsed_time = current_time - last_read_time_;
-        // Match Python: frames_to_advance = int(elapsed * fps) * int(15 / fps)
         // Accounts for camera running at ~15fps raw; advances by that many raw frames per target frame.
         int raw_per_target = (fps_ > 0) ? static_cast<int>(15.0f / fps_) : 1;
         if (raw_per_target < 1) raw_per_target = 1;

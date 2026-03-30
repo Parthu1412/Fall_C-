@@ -1,3 +1,8 @@
+// Fall detection service — coordinates pose inference, angle evaluation, and
+// per-frame state tracking to produce a confirmed fall verdict.
+// Wraps PoseInference and FallEval, applies confidence filtering,
+// draws skeleton annotations when enabled, and logs angle metrics.
+
 #include "fall.hpp"
 #include "../inferences/pose.hpp"
 #include "../helpers.hpp"
@@ -9,6 +14,7 @@
 
 namespace app::core::services {
 
+
 FallDetectionService::FallDetectionService(bool annotate_image)
     : annotate_image_(annotate_image)
 {
@@ -18,6 +24,7 @@ FallDetectionService::FallDetectionService(bool annotate_image)
 
 FallDetectionService::~FallDetectionService() = default;
 
+// Returns {is_fall, annotated_frame}
 std::pair<bool, cv::Mat> FallDetectionService::detect_fall(
     const cv::Mat& frame,
     const std::vector<std::vector<std::vector<float>>>& redis_style_detections)
@@ -26,8 +33,9 @@ std::pair<bool, cv::Mat> FallDetectionService::detect_fall(
         app::utils::Logger::error("[FallDetectionService] Invalid input frame");
         return {false, cv::Mat()};
     }
-
+    
     auto& cfg = app::config::AppConfig::getInstance();
+    // Run pose inference and evaluate keypoints to determine if a fall is detected. Annotate frame if enabled.
     try {
         std::vector<std::vector<std::vector<float>>> keypoints_list =
             pose_->detect(frame, redis_style_detections);
@@ -38,6 +46,7 @@ std::pair<bool, cv::Mat> FallDetectionService::detect_fall(
         const float leg_th = static_cast<float>(cfg.leg_angle);
         const float conf_th = cfg.keypoints_conf_threshold;
 
+        // Evaluate each detected person's keypoints for fall angles and determine if a fall is detected based on thresholds. Log details if a fall is detected.
         for (const auto& keypoints : keypoints_list) {
             auto eval = evaluate_fall_keypoints_python(keypoints, torso_th, leg_th, conf_th);
             if (!eval.is_fall) continue;

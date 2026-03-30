@@ -1,3 +1,8 @@
+// RTSP/video camera reader — background-threaded frame capture for a single camera.
+// Supports both live RTSP streams and local video files. For video files, throttles
+// read speed to match target_fps to prevent fast-forward playback. Exposes a
+// thread-safe ring buffer sampled at a configurable FPS for downstream consumers.
+
 #include "rtsp_camera.hpp"
 #include "logger.hpp"
 #include <stdexcept>
@@ -25,7 +30,6 @@ RTSPCamera::~RTSPCamera() {
     release();
 }
 
-// Match Python: _open_capture — raises on failure
 void RTSPCamera::openCapture() {
     {
         std::lock_guard<std::mutex> lk(cap_mtx_);
@@ -38,7 +42,6 @@ void RTSPCamera::openCapture() {
     }
 }
 
-// Match Python: _sample_frames_to_target_fps
 std::vector<cv::Mat> RTSPCamera::sampleFramesToTargetFps(const std::vector<cv::Mat>& frames) {
     if (frames.empty()) return {};
     int total = static_cast<int>(frames.size());
@@ -54,9 +57,21 @@ std::vector<cv::Mat> RTSPCamera::sampleFramesToTargetFps(const std::vector<cv::M
     return sampled;
 }
 
-// Match Python: _read_frames_loop (background thread)
+// Background thread: read frames from RTSP stream
 void RTSPCamera::readFramesLoop() {
+    // Detect video file vs live stream — live streams return 0 or negative frame count.
+    // Video files must be throttled to target_fps to avoid fast-forward playback;
+    bool is_video_file = false;
+    {
+        std::lock_guard<std::mutex> lk(cap_mtx_);
+        double fc = cap_.get(cv::CAP_PROP_FRAME_COUNT);
+        is_video_file = (fc > 0);
+    }
+    const auto frame_interval = std::chrono::microseconds(
+        static_cast<long long>(1e6 / std::max(1, target_fps_)));
+
     while (running_) {
+        const auto frame_start = std::chrono::steady_clock::now();
         try {
             cv::Mat frame;
             bool ret;
@@ -70,7 +85,7 @@ void RTSPCamera::readFramesLoop() {
                 auto now = std::chrono::steady_clock::now();
                 double time_since_last = std::chrono::duration<double>(now - last_success_time_).count();
 
-                // Match Python: 10 seconds without a good frame triggers reconnect
+                // 10 seconds without a good frame triggers reconnect
                 if (time_since_last >= 10.0) {
                     Logger::warning("[RTSPCamera] RTSP stream stalled, attempting reconnect"
                         " | url=" + url_ +
@@ -110,7 +125,7 @@ void RTSPCamera::readFramesLoop() {
                 }
                 frames_sampled_count_ += static_cast<int>(sampled.size());
 
-                // Match Python: debug FPS stats log every second
+                // Debug FPS stats log every second
                 double log_elapsed = std::chrono::duration<double>(now - last_log_time_).count();
                 if (log_elapsed >= 1.0) {
                     double received_fps = log_elapsed > 0 ? frames_received_count_ / log_elapsed : 0.0;
@@ -126,6 +141,15 @@ void RTSPCamera::readFramesLoop() {
 
                 frame_buffer_1s_.clear();
                 buffer_start_time_ = now;
+            }
+
+            // For video files: throttle reading to target_fps so the 1-second sampling
+            // window sees ~target_fps frames (not hundreds) — prevents fast-forward output.
+            if (is_video_file) {
+                auto elapsed = std::chrono::steady_clock::now() - frame_start;
+                if (elapsed < frame_interval) {
+                    std::this_thread::sleep_for(frame_interval - elapsed);
+                }
             }
 
         } catch (const std::exception& e) {

@@ -1,3 +1,10 @@
+// ZMQ I/O helpers — shared serialisation/deserialisation layer for inter-process messaging.
+// Implements two packet types sent between the three pipeline processes:
+//   ZmqFramePacket  — two-part message (JSON meta + raw JPEG bytes) camera→fall_inference.
+//   ZmqVideoTaskPacket — multi-part message (JSON meta + N JPEG frames + detection frame)
+//                        fall_inference→msg_gen.
+// Also provides imdecode_jpeg_message() and make_trace_id() utilities.
+
 #include "zmq_io.hpp"
 #include "../../utils/detection_json.hpp"
 #include "../../utils/logger.hpp"
@@ -19,6 +26,7 @@ cv::Mat imdecode_jpeg_message(const zmq::message_t& msg) {
     return cv::imdecode(buf, cv::IMREAD_COLOR);
 }
 
+// Convert between JSON keypoints and Redis/ZMQ format (3D vector of floats)
 void put_keypoints_json(nlohmann::json& j, const std::vector<std::vector<std::vector<float>>>& kpts) {
     if (kpts.empty()) return;
     nlohmann::json dets = nlohmann::json::array();
@@ -32,18 +40,21 @@ void put_keypoints_json(nlohmann::json& j, const std::vector<std::vector<std::ve
 
 }  // namespace
 
+// Parse JSON keypoints back into ZMQ packet format
 void json_to_redis_keypoints(const nlohmann::json& j,
                              std::vector<std::vector<std::vector<float>>>& out)
 {
     app::utils::parse_detections_keypoints(j, out);
 }
 
+// Send a frame packet over ZMQ: encode frame as JPEG, serialize metadata as JSON, send multipart message
 bool zmq_send_frame_packet(zmq::socket_t& sock, const ZmqFramePacket& p) {
     std::vector<uchar> jpg;
     if (!cv::imencode(".jpg", p.frame, jpg)) {
         app::utils::Logger::error("[zmq] imencode failed");
         return false;
     }
+    // Construct JSON metadata with camera_id, store_id, optional source_path, and keypoints
     nlohmann::json meta;
     meta["camera_id"] = p.camera_id;
     meta["store_id"] = p.store_id;
@@ -56,20 +67,23 @@ bool zmq_send_frame_packet(zmq::socket_t& sock, const ZmqFramePacket& p) {
     memcpy(m0.data(), meta_s.data(), meta_s.size());
     zmq::message_t m1(jpg.size());
     memcpy(m1.data(), jpg.data(), jpg.size());
+
+    // Send multipart message: [meta JSON][JPEG bytes] with dontwait on first part to detect HWM full
     try {
-        // dontwait on first part: EAGAIN = HWM full (matches Python zmq.NOBLOCK → zmq.Again)
         sock.send(m0, zmq::send_flags::sndmore | zmq::send_flags::dontwait);
         sock.send(m1, zmq::send_flags::none);
     } catch (const zmq::error_t& e) {
         if (e.num() == EAGAIN) return false;  // HWM full — caller warns and drops
-        // Fatal ZMQ error — re-throw so caller can exit(1) (matches Python zmq.ZMQError → sys.exit)
+        // Fatal ZMQ error — re-throw so caller can exit(1)
         throw;
     }
     return true;
 }
 
+// Receive a frame packet from ZMQ: parse JSON metadata, decode JPEG frame, populate ZmqFramePacket struct
 bool zmq_recv_frame_packet(zmq::socket_t& sock, ZmqFramePacket& p, zmq::recv_flags flags) {
     zmq::message_t m0, m1;
+    // Receive multipart message: [meta JSON][JPEG bytes]
     try {
         auto r0 = sock.recv(m0, flags);
         if (!r0) return false;
@@ -79,6 +93,7 @@ bool zmq_recv_frame_packet(zmq::socket_t& sock, ZmqFramePacket& p, zmq::recv_fla
     } catch (const zmq::error_t&) {
         return false;
     }
+    // Parse JSON metadata and decode JPEG frame
     try {
         std::string meta_s(static_cast<char*>(m0.data()), m0.size());
         auto j = nlohmann::json::parse(meta_s);
@@ -90,6 +105,7 @@ bool zmq_recv_frame_packet(zmq::socket_t& sock, ZmqFramePacket& p, zmq::recv_fla
         app::utils::Logger::error(std::string("[zmq] bad frame meta JSON: ") + e.what());
         return false;
     }
+    // Decode JPEG frame into cv::Mat
     p.frame_jpg.assign(static_cast<const uchar*>(m1.data()),
                        static_cast<const uchar*>(m1.data()) + m1.size());
     p.frame = imdecode_jpeg_message(m1);
@@ -97,6 +113,7 @@ bool zmq_recv_frame_packet(zmq::socket_t& sock, ZmqFramePacket& p, zmq::recv_fla
     return true;
 }
 
+// Generate a unique trace ID using current time and random number generator
 std::string make_trace_id() {
     auto now = std::chrono::system_clock::now().time_since_epoch().count();
     thread_local std::mt19937_64 gen(std::random_device{}());
@@ -121,16 +138,18 @@ bool zmq_send_video_task(zmq::socket_t& sock, const ZmqVideoTaskPacket& t) {
     meta["n_frames"] = static_cast<int>(t.video_frames.size());
     if (has_det) meta["det_len"] = static_cast<int>(det_jpg.size());
     std::string meta_s = meta.dump();
+    // Send multipart message: [meta JSON][optional det JPEG][video frame JPEGs...] with dontwait on first part to detect HWM full
     try {
         zmq::message_t m(meta_s.size());
         memcpy(m.data(), meta_s.data(), meta_s.size());
-        // dontwait on first part: EAGAIN = HWM full (matches Python zmq.NOBLOCK → zmq.Again)
+        // dontwait on first part: EAGAIN = HWM full
         sock.send(m, zmq::send_flags::sndmore | zmq::send_flags::dontwait);
         if (has_det) {
             zmq::message_t md(det_jpg.size());
             memcpy(md.data(), det_jpg.data(), det_jpg.size());
             sock.send(md, zmq::send_flags::sndmore);
         }
+        // Send each video frame as a separate message part
         for (size_t i = 0; i < t.video_frames.size(); ++i) {
             const auto& jpg = t.video_frames[i];
             zmq::message_t mf(jpg.size());
@@ -146,7 +165,7 @@ bool zmq_send_video_task(zmq::socket_t& sock, const ZmqVideoTaskPacket& t) {
     return true;
 }
 
-bool zmq_recv_video_task(zmq::socket_t& sock, ZmqVideoTaskPacket& t, zmq::recv_flags flags) {
+bool zmq_recv_video_task(zmq::socket_t& sock, ZmqVideoTaskPacket& t, zmq::recv_flags flags) { // Similar to zmq_recv_frame_packet but for video task packets with multiple video frame parts
     zmq::message_t m0;
     try {
         auto r0 = sock.recv(m0, flags);
@@ -156,6 +175,7 @@ bool zmq_recv_video_task(zmq::socket_t& sock, ZmqVideoTaskPacket& t, zmq::recv_f
         return false;
     }
 
+    // Parse JSON metadata from first part
     std::string meta_s(static_cast<char*>(m0.data()), m0.size());
     nlohmann::json j;
     try {

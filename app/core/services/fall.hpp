@@ -1,3 +1,8 @@
+// Interface for the fall detection service.
+// Declares FallDetectionService, which accepts a raw frame, runs YOLO-pose
+// inference, evaluates body angles, and returns a fall verdict with annotated
+// frame and keypoints for downstream buffering and video clip assembly.
+
 #pragma once
 
 #include <memory>

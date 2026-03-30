@@ -1,3 +1,8 @@
+// Interface for the AWS S3 client.
+// Declares S3Client, which wraps the AWS C++ SDK to upload fall-event video
+// clips and snapshot images, returning the public S3 URL for downstream
+// Kafka/RabbitMQ notification messages.
+
 #pragma once
 
 #include <memory>

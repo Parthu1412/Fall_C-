@@ -1,3 +1,7 @@
+// AWS S3 client implementation — uploads video clips and snapshot images to S3.
+// Initialises the AWS SDK, builds PutObjectRequests from local file paths or
+// in-memory buffers, and returns the resulting S3 object URL on success.
+
 #include "aws.hpp"
 #include "../config.hpp"
 #include "logger.hpp"

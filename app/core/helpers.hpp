@@ -1,3 +1,7 @@
+// Interface for core helper utilities.
+// Declares geometric helpers for body angle computation and keypoint
+// coordinate validation shared across fall_eval and skeleton drawing code.
+
 #pragma once
 
 #include <opencv2/opencv.hpp>

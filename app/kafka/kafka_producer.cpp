@@ -1,3 +1,7 @@
+// Kafka producer — publishes fall-event notification messages to an AWS MSK
+// (or plain Kafka) topic. Supports IAM-based SASL/OAUTHBEARER authentication
+// via msk_token for MSK clusters, and plain PLAINTEXT for local brokers.
+
 #include "kafka_producer.hpp"
 #include "msk_token.hpp"
 #include "../config.hpp"
@@ -137,11 +141,11 @@ void KafkaProducer::produce(const std::string& topic, const app::utils::FallMess
     if (resp != RdKafka::ERR_NO_ERROR) {
         std::string errMsg = "[Kafka] produce failed: " + std::string(RdKafka::err2str(resp));
         app::utils::Logger::error(errMsg);
-        // Match Python: stop producer then re-raise to caller
+        // Stop producer then re-raise to caller
         stop();
         throw std::runtime_error(errMsg);
     }
-    // Match Python send_and_wait: block until broker ACKs (or timeout)
+    // Block until broker ACKs (or timeout)
     RdKafka::ErrorCode flush_err = impl_->producer->flush(5000);
     if (flush_err != RdKafka::ERR_NO_ERROR) {
         std::string errMsg = "[Kafka] flush timed out (message may not be delivered): " +

@@ -1,3 +1,7 @@
+// Interface for the Kafka producer.
+// Declares KafkaProducer, which serialises a FallEventMessage to JSON and
+// publishes it to the configured Kafka/MSK topic on each confirmed fall event.
+
 #pragma once
 
 #include "../utils/message.hpp"

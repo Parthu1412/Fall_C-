@@ -1,3 +1,8 @@
+// Camera Orchestrator — Process for camera management.
+// Spawns one worker thread per configured camera, reads frames from RTSP streams
+// or Redis, JPEG-encodes them, and pushes ZmqFramePackets to the fall_inference
+// process via a ZMQ PUSH socket. Monitors worker liveness and restarts on failure.
+
 #include "zmq_io.hpp"
 #include "../../config.hpp"
 #include "../../utils/logger.hpp"
@@ -19,7 +24,8 @@ static std::atomic<bool> g_stop{false};
 static std::mutex g_zmq_send_mtx;
 static void on_sig(int) { g_stop = true; }
 
-// Matches Python's thread.is_alive() — set to false when thread function exits
+//Set to false when thread function exits
+// run_camera_worker — one per camera, runs until g_stop
 static void run_camera_worker(const CameraConfig& cam, zmq::socket_t& push_sock,
                               std::atomic<bool>& alive) {
     using namespace app::core::orchestrators;
@@ -50,12 +56,12 @@ static void run_camera_worker(const CameraConfig& cam, zmq::socket_t& push_sock,
                 std::lock_guard<std::mutex> lk(g_zmq_send_mtx);
                 try {
                     if (!zmq_send_frame_packet(push_sock, p)) {
-                        // EAGAIN: HWM full — matches Python zmq.Again → warn + drop
+                        // EAGAIN: HWM full — zmq.Again → warn + drop
                         app::utils::Logger::warning("[Camera] ZMQ queue full, dropping frame camera_id=" +
                             std::to_string(cam.id));
                     }
                 } catch (const zmq::error_t& e) {
-                    // Fatal ZMQ error — matches Python zmq.ZMQError → sys.exit(1)
+                    // Fatal ZMQ error — zmq.ZMQError → sys.exit(1)
                     app::utils::Logger::error("[Camera] Fatal ZMQ send error: " + std::string(e.what()));
                     std::exit(1);
                 }
@@ -66,7 +72,7 @@ static void run_camera_worker(const CameraConfig& cam, zmq::socket_t& push_sock,
     }
 
     if (cfg.client_type == "rtsp" || cfg.client_type == "video") {
-        // Match Python camera_initialize.py: RTSPCamera(url, fps=config.FPS, buffer_size=config.BUFFER_SIZE)
+      
         app::utils::RTSPCamera cap(cam.url, cfg.fps, cfg.buffer_size);
         while (!g_stop) {
             cv::Mat frame;
@@ -83,12 +89,12 @@ static void run_camera_worker(const CameraConfig& cam, zmq::socket_t& push_sock,
                 std::lock_guard<std::mutex> lk(g_zmq_send_mtx);
                 try {
                     if (!zmq_send_frame_packet(push_sock, p)) {
-                        // EAGAIN: HWM full — matches Python zmq.Again → warn + drop
+                        // EAGAIN: HWM full — zmq.Again → warn + drop
                         app::utils::Logger::warning("[Camera] ZMQ queue full, dropping frame camera_id=" +
                             std::to_string(cam.id));
                     }
                 } catch (const zmq::error_t& e) {
-                    // Fatal ZMQ error — matches Python zmq.ZMQError → sys.exit(1)
+                    // Fatal ZMQ error — zmq.ZMQError → sys.exit(1)
                     app::utils::Logger::error("[Camera] Fatal ZMQ send error: " + std::string(e.what()));
                     std::exit(1);
                 }
@@ -104,7 +110,7 @@ static void run_camera_worker(const CameraConfig& cam, zmq::socket_t& push_sock,
         " not supported in C++ camera_reader (use redis, rtsp, or video).");
     alive = false;
 }
-
+// Starts threads, monitors, joins on exit
 int main() {
     app::utils::Logger::set_level_from_env();
     auto& cfg = app::config::AppConfig::getInstance();
@@ -124,10 +130,10 @@ int main() {
         push.set(zmq::sockopt::sndhwm, 300);
         app::utils::Logger::info("[CameraOrche] Bound ZMQ PUSH *:" + std::to_string(cfg.fall_inference_port));
 
-        // Per-thread alive flags — mirrors Python's thread.is_alive()
+        // Per-thread alive flags to monitor thread health
         std::vector<std::atomic<bool>> alive_flags(cameras.size());
         for (auto& f : alive_flags) f.store(true);
-
+        // Start one thread per camera, passing reference to ZMQ socket and alive flag
         std::vector<std::thread> threads;
         threads.reserve(cameras.size());
         std::size_t idx = 0;
@@ -136,7 +142,7 @@ int main() {
                                  std::ref(push), std::ref(alive_flags[idx++]));
         }
 
-        // Matches Python: monitor every 5s, warn if any thread died
+        // Monitor thread health every 5s, warn if any thread died
         while (!g_stop) {
             std::this_thread::sleep_for(std::chrono::seconds(5));
             for (std::size_t i = 0; i < alive_flags.size(); ++i) {
@@ -146,7 +152,7 @@ int main() {
                 }
             }
         }
-
+        // Join threads on exit
         g_stop = true;
         for (auto& th : threads) {
             if (th.joinable()) th.join();

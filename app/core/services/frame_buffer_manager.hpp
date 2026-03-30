@@ -1,3 +1,8 @@
+// Interface for per-camera frame buffering and fall-detection state management.
+// Declares FrameBufferManager, which stores rolling JPEG frame windows per camera
+// and exposes should_process_frame(), update(), and get_result() for use by
+// the fall_inference orchestrator.
+
 #pragma once
 
 #include <deque>
@@ -12,6 +17,7 @@ namespace app {
 namespace core {
 namespace services {
 
+// Represents a completed fall detection result, including the annotated detection frame and associated video frames.
 struct DetectionResult {
     int camera_id = 0;
     int store_id = 0;
@@ -19,6 +25,7 @@ struct DetectionResult {
     std::vector<std::vector<uchar>> video_frames;  // JPEG bytes
 };
 
+// Internal struct to track pending detection info for a camera_id, including the annotated frame and buffers of frames before/after detection.
 struct DetectionInfo {
     int store_id = 0;
     int buffer_size_at_detection = 0;
@@ -49,6 +56,7 @@ public:
     // Process 1 of every 15 frames (matches Python)
     bool should_process_frame(int camera_id) const;
 
+    // Returns the number of frames processed so far for the given camera_id.
     int increment_processed_count(int camera_id);
 
     // Store detection info when fall is detected (only call when is_fall == true)

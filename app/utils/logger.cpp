@@ -1,3 +1,6 @@
+// Logger implementation — thread-safe stdout logger with INFO/DEBUG/WARNING/ERROR levels.
+// Level is controlled at runtime via the LOG_LEVEL environment variable.
+
 #include "logger.hpp"
 
 namespace app {

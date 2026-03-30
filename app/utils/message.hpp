@@ -1,3 +1,7 @@
+// Message payload helpers — declares the FallEventMessage struct and JSON
+// serialisation used when publishing fall-event notifications to Kafka
+// and RabbitMQ, matching the schema expected by the Python pipeline.
+
 #pragma once
 
 #include <string>

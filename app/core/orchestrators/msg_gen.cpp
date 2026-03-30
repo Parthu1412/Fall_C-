@@ -1,3 +1,9 @@
+// MsgGen Orchestrator — Video creation and notification process.
+// Receives ZmqVideoTaskPackets from fall_inference via ZMQ PULL, assembles JPEG
+// frames into an MP4 clip (with detection overlay), uploads the clip and a
+// snapshot image to S3, then publishes a fall-event notification to Kafka and
+// RabbitMQ with S3 URLs and metadata.
+
 #include "zmq_io.hpp"
 #include "../../config.hpp"
 #include "../../kafka/kafka_producer.hpp"
@@ -38,6 +44,7 @@ static std::string utc_iso_timestamp() {
     return std::string(buf);
 }
 
+// Process a single video task: encode video, upload to S3, send Kafka and RabbitMQ messages
 static void process_task(app::utils::AwsApiManager& /*aws_life*/,
                          app::utils::S3Client& s3,
                          app::kafka::KafkaProducer& kafka,
@@ -58,6 +65,7 @@ static void process_task(app::utils::AwsApiManager& /*aws_life*/,
         return;
     }
 
+    // Create temp video file path
     std::string tmp_dir = "/tmp/fall_videos";
     std::filesystem::path dir(tmp_dir);
     std::error_code ec;
@@ -65,6 +73,8 @@ static void process_task(app::utils::AwsApiManager& /*aws_life*/,
 
     auto tt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::tm tm_buf{};
+
+    // Use thread-safe localtime variants
 #ifdef _WIN32
     localtime_s(&tm_buf, &tt);
 #else
@@ -74,6 +84,7 @@ static void process_task(app::utils::AwsApiManager& /*aws_life*/,
     tss << std::put_time(&tm_buf, "%Y_%m_%d_%H_%M_%S");
     std::string video_path = tmp_dir + "/" + trace_id + "_" + std::to_string(camera_id) + "_timestamp_" + tss.str() + ".mp4";
 
+    // Upload detection frame to S3 and encode/upload video, then send Kafka and RabbitMQ messages
     std::optional<std::string> image_url;
     std::optional<std::string> video_url;
 
@@ -90,12 +101,13 @@ static void process_task(app::utils::AwsApiManager& /*aws_life*/,
             std::exit(1);
         }
     }
-
+    // Encode video from frames and upload to S3
     if (!app::core::services::VideoHelper::write_video(ev.video_frames, video_path, 15)) {
         app::utils::Logger::warning("[MsgGen] Video encode failed, dropping task trace_id=" + trace_id);
         return;
     }
 
+    // Verify video file exists before attempting upload
     std::ifstream vf(video_path, std::ios::binary);
     if (vf.good()) {
         std::string objv = "fall-detection/" + std::to_string(store_id) + "/" + trace_id + ".mp4";
@@ -133,22 +145,26 @@ static void process_task(app::utils::AwsApiManager& /*aws_life*/,
     } catch (...) {}
 }
 
-int main() {
-    using namespace app::core::orchestrators;
 
+int main() { 
+    using namespace app::core::orchestrators;
+    // Initialize logging, AWS API, Kafka producer, RabbitMQ client, and ZMQ socket
     app::utils::Logger::set_level_from_env();
+    // Handle SIGINT/SIGTERM for graceful shutdown
     auto& cfg = app::config::AppConfig::getInstance();
     std::signal(SIGINT, on_sig);
     std::signal(SIGTERM, on_sig);
 
+    // Initialize AWS API manager (lifetime tied to main)
     app::utils::AwsApiManager aws_life;
     app::kafka::KafkaProducer kafka;
     kafka.start_with_retry();
 
+    // Initialize RabbitMQ client with retry logic
     std::unique_ptr<app::mqtt::RabbitMQClient> rmq;
     for (int a = 0; a < cfg.max_retries; ++a) {
         rmq = std::make_unique<app::mqtt::RabbitMQClient>();
-        rmq->connect_with_retry(); // Match Python: explicit connect_rabbitmq_with_retry()
+        rmq->connect_with_retry(); //Explicit connect_rabbitmq_with_retry()
         if (rmq->is_connected() || cfg.rabbitmq_host.empty()) break;
         app::utils::Logger::error("[MsgGen] RabbitMQ connect failed attempt " + std::to_string(a + 1));
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -158,6 +174,7 @@ int main() {
         return 1;
     }
 
+    // Initialize S3 client
     app::utils::S3Client s3;
 
     zmq::context_t ctx(1);

@@ -1,3 +1,7 @@
+// Interface for the video assembly helper.
+// Declares VideoHelper::write_video(), which takes a list of JPEG frame buffers
+// and an output file path and produces an MP4 clip via FFmpeg or OpenCV fallback.
+
 #pragma once
 
 #include <opencv2/opencv.hpp>

@@ -1,3 +1,8 @@
+// Core helper utilities — shared geometric and keypoint helper functions used
+// by fall evaluation and skeleton annotation. Includes body angle calculation
+// (torso and leg segment vectors vs. vertical axis) and keypoint visibility
+// validation, matching the Python core/helpers.py logic exactly.
+
 #include "helpers.hpp"
 #include "../config.hpp" // For the confidence threshold singleton
 #include <cmath>

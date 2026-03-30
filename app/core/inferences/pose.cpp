@@ -1,3 +1,11 @@
+// Pose inference using a TorchScript YOLO-pose model.
+// Loads the model onto GPU (or CPU fallback), auto-detects FP16/BF16/FP32 weight dtype,
+// runs 100 warmup forward passes, then exposes detect() which:
+//   - letterbox-resizes each frame (aspect-ratio preserving, grey padding),
+//   - runs the TorchScript forward pass,
+//   - applies GPU confidence filtering + CPU greedy NMS, and
+//   - decodes 56-dim rows into 17 keypoints × (x, y, visibility) per detected person.
+
 #include "pose.hpp"
 
 #include "../../utils/logger.hpp"
@@ -13,9 +21,8 @@
 
 namespace app::core::inferences {
 
-// ---------------------------------------------------------------------------
-// Constructor — matches pose.hpp: no use_fp16 arg; dtype auto-detected
-// ---------------------------------------------------------------------------
+// Constructor — matches pose.hpp: dtype auto-detected
+
 PoseInference::PoseInference(const std::string& model_path)
     : device_(at::hasCUDA() ? torch::Device(torch::kCUDA) : torch::Device(torch::kCPU))
 {
@@ -38,16 +45,27 @@ PoseInference::PoseInference(const std::string& model_path)
 
         app::utils::Logger::info("[PoseInference] Loaded on " +
             std::string(device_.is_cuda() ? "GPU" : "CPU") + ": " + model_path);
+
+        // Warmup: run 100 dummy frames
+        app::utils::Logger::info("[PoseInference] Warming up model with 100 dummy frames...");
+        {
+            torch::NoGradGuard no_grad; 
+            cv::Mat dummy(640, 640, CV_8UC3, cv::Scalar(114, 114, 114));
+            for (int i = 0; i < 100; ++i) {
+                auto inp = preprocess_(dummy);
+                module_.forward({inp});
+            }
+            if (device_.is_cuda()) torch::cuda::synchronize();
+        }
+        app::utils::Logger::info("[PoseInference] Warmup complete.");
     } catch (const std::exception& e) {
         app::utils::Logger::error(std::string("[PoseInference] Failed to load model: ") + e.what());
         std::exit(EXIT_FAILURE);
     }
 }
 
-// ---------------------------------------------------------------------------
 // preprocess_ — GPU letterbox: BGR→RGB, normalize, aspect-ratio-preserving
 //               resize + grey padding, then cast to model dtype
-// ---------------------------------------------------------------------------
 torch::Tensor PoseInference::preprocess_(const cv::Mat& frame) const {
     // .clone() ensures the tensor owns its data before the async .to(device_) copy
     auto raw = torch::from_blob(frame.data, {1, frame.rows, frame.cols, 3}, torch::kByte)
@@ -63,7 +81,8 @@ torch::Tensor PoseInference::preprocess_(const cv::Mat& frame) const {
     int new_h = static_cast<int>(std::round(frame.rows * r));
     int new_w = static_cast<int>(std::round(frame.cols * r));
 
-    auto resized = torch::nn::functional::interpolate(
+    // Use PyTorch's native interpolation (GPU-accelerated if on CUDA) for resizing
+    auto resized = torch::nn::functional::interpolate( 
         t,
         torch::nn::functional::InterpolateFuncOptions()
             .size(std::vector<int64_t>{new_h, new_w})
@@ -87,9 +106,8 @@ torch::Tensor PoseInference::preprocess_(const cv::Mat& frame) const {
     return padded.to(model_elem_dtype_);
 }
 
-// ---------------------------------------------------------------------------
 // decode_and_nms_ — GPU confidence filter → CPU decode → float NMS → unscale
-// ---------------------------------------------------------------------------
+
 void PoseInference::decode_and_nms_(const torch::Tensor& raw, int orig_w, int orig_h,
                                     std::vector<std::vector<std::vector<float>>>& out)
 {
@@ -155,19 +173,18 @@ void PoseInference::decode_and_nms_(const torch::Tensor& raw, int orig_w, int or
     }
 }
 
-// ---------------------------------------------------------------------------
 // detect — Redis passthrough OR GPU inference pipeline
-// ---------------------------------------------------------------------------
+
 std::vector<std::vector<std::vector<float>>> PoseInference::detect(
     const cv::Mat& frame,
     const std::vector<std::vector<std::vector<float>>>& from_redis)
 {
-    // Matches Python exactly:
+
     //   if CLIENT_TYPE == "redis": return redis detections (empty list if none)
-    //   else: run inference
+    
     const auto& cfg = app::config::AppConfig::getInstance();
     if (cfg.client_type == "redis") {
-        return from_redis;  // empty if Redis had no data this frame — matches Python behaviour
+        return from_redis;  // empty if Redis had no data this frame
     }
     if (frame.empty()) return {};
 

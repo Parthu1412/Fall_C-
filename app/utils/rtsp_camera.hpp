@@ -1,3 +1,8 @@
+// Interface for the background-threaded RTSP/video camera reader.
+// Declares RTSPCamera, which captures frames from an RTSP stream or video file
+// on a dedicated thread and exposes getLatestFrames() for FPS-sampled
+// non-blocking access by the camera orchestrator.
+
 #pragma once
 
 #include <opencv2/opencv.hpp>

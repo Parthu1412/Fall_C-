@@ -1,3 +1,7 @@
+// Interface for TorchScript YOLO-pose inference.
+// Declares PoseInference: loads a .torchscript model, preprocesses frames via GPU letterbox,
+// runs inference, and returns 17 keypoints per detected person as (x, y, visibility) vectors.
+
 #pragma once
 
 #include <c10/core/ScalarType.h>

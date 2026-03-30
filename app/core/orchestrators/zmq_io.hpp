@@ -1,3 +1,8 @@
+// ZMQ I/O interface — declares the shared packet structs and send/recv helpers
+// used by all three pipeline processes (camera_reader, fall_inference, msg_gen).
+// ZmqFramePacket carries a camera frame from camera_reader to fall_inference.
+// ZmqVideoTaskPacket carries a confirmed-fall clip task from fall_inference to msg_gen.
+
 #pragma once
 
 #include <zmq.hpp>

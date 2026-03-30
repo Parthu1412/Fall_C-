@@ -1,3 +1,7 @@
+// Detection JSON helpers — serialises and deserialises keypoint data between
+// the 3D vector format used internally (persons × keypoints × [x,y,vis]) and
+// the nlohmann::json representation carried in ZMQ inter-process messages.
+
 #pragma once
 
 #include <nlohmann/json.hpp>

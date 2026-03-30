@@ -1,3 +1,7 @@
+// Logger interface — declares a simple static logger with levelled output
+// (DEBUG, INFO, WARNING, ERROR) written to stdout with UTC timestamps.
+// Log level is read from the LOG_LEVEL environment variable at startup.
+
 #pragma once
 
 #include <iostream>

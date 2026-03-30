@@ -5,9 +5,8 @@ set -eu
 RUN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$RUN_DIR"
 
-# ==============================================================================
 # STEP 1: Build (skip when FALL_SKIP_BUILD=1, e.g. inside Docker with prebuilts)
-# ==============================================================================
+
 if [ "${FALL_SKIP_BUILD:-0}" != "1" ]; then
     echo "========================================"
     echo "      COMPILING C++ SOURCE CODE         "
@@ -67,9 +66,8 @@ else
     echo "Skipping build (FALL_SKIP_BUILD=1) — using prebuilt binaries."
 fi
 
-# ==============================================================================
 # STEP 2: Set runtime environment
-# ==============================================================================
+
 BUILD_DIR="${BUILD_DIR:-${RUN_DIR}/build}"
 
 # Load vcpkg OpenSSL before any binary runs — needed by Kafka/RabbitMQ SSL stacks.
@@ -94,9 +92,9 @@ fi
 export OPENCV_FFMPEG_CAPTURE_OPTIONS="${OPENCV_FFMPEG_CAPTURE_OPTIONS:-rtsp_transport;tcp}"
 export TORCH_XNNPACK_DISABLE="${TORCH_XNNPACK_DISABLE:-1}"
 
-# ==============================================================================
+
 # STEP 3: Launch pipeline
-# ==============================================================================
+
 echo "========================================"
 echo "        STARTING C++ PIPELINE           "
 echo "========================================"
@@ -124,8 +122,10 @@ echo "Starting fall_inference..."
 "$BUILD_DIR/fall_inference" &
 PIDS["fall_inference"]=$!
 
-echo "Waiting 2s for ZMQ sockets to bind..."
-sleep 2
+echo "Waiting for fall_inference to finish model warmup (port ${FALL_INFERENCE_PORT:-5559})..."
+timeout 60 bash -c "until nc -z 127.0.0.1 ${FALL_INFERENCE_PORT:-5559} 2>/dev/null; do sleep 0.5; done" \
+    || { echo "fall_inference did not become ready in 60s. Exiting."; exit 1; }
+echo "fall_inference ready."
 
 echo "Starting camera_reader..."
 "$BUILD_DIR/camera_reader" &

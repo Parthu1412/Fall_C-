@@ -1,3 +1,8 @@
+// Frame buffering utilities for managing fall-detection context per camera.
+// Maintains a ring buffer of JPEG frames per camera, tracks fall state
+// (pre/post-detection windows), and assembles the before+after frame lists
+// needed by msg_gen to produce a fall-event video clip.
+
 #include "frame_buffer_manager.hpp"
 
 #include <algorithm>
@@ -114,7 +119,7 @@ bool FrameBufferManager::should_process_frame(int camera_id) const {
     auto& cfg = app::config::AppConfig::getInstance();
     int interval = std::max(1, cfg.fall_sample_interval);
     int fc = frame_counters_.count(camera_id) ? frame_counters_.at(camera_id) : 0;
-    return (fc % interval) == 1;
+    return (fc % interval) == 0;
 }
 
 int FrameBufferManager::increment_processed_count(int camera_id) {

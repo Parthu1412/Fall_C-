@@ -1,3 +1,8 @@
+// Interface for fall angle evaluation.
+// Declares FallAngleResult and evaluate_fall_angles(), which inspects 17 YOLO-pose
+// keypoints (shoulders, hips, knees, ankles) to determine if a person has fallen
+// based on configurable torso and leg angle thresholds.
+
 #pragma once
 
 #include <vector>

@@ -1,3 +1,7 @@
+// MSK IAM token provider — generates short-lived SASL/OAUTHBEARER tokens for
+// authenticating to AWS MSK clusters using IAM credentials (instance role,
+// environment variables, or credential chain), replacing static username/password.
+
 #include "msk_token.hpp"
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProviderChain.h>

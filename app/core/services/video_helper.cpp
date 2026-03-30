@@ -1,3 +1,7 @@
+// Video assembly helper — encodes a sequence of JPEG frames into an MP4 clip.
+// Writes frames through an FFmpeg pipe (H.264, configurable FPS) and falls back
+// to OpenCV cv::VideoWriter if FFmpeg is unavailable or the pipe open fails.
+
 #include "video_helper.hpp"
 #include "../../utils/logger.hpp"
 #include <cstdio>
@@ -16,6 +20,7 @@ namespace app {
 namespace core {
 namespace services {
 
+// Writes a video file from a sequence of OpenCV Mats, using FFmpeg for encoding with an OpenCV fallback.
 bool VideoHelper::write_video(const std::vector<cv::Mat>& frames, 
                               const std::string& output_path, 
                               int fps) 
@@ -25,7 +30,7 @@ bool VideoHelper::write_video(const std::vector<cv::Mat>& frames,
         return false;
     }
 
-    // Match Python: os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
     try {
         auto parent = std::filesystem::path(output_path).parent_path();
         if (!parent.empty()) std::filesystem::create_directories(parent);
@@ -33,7 +38,7 @@ bool VideoHelper::write_video(const std::vector<cv::Mat>& frames,
         app::utils::Logger::warning(std::string("[VideoHelper] Could not create output directory: ") + e.what());
     }
 
-    // Redirect stderr to a temp file so we can log FFmpeg errors on failure (matches Python stderr=PIPE).
+    // Redirect stderr to a temp file so we can log FFmpeg errors on failure
     std::string ffmpeg_log = output_path + ".ffmpeg_stderr.tmp";
     std::string stderr_redirect = " 2>" + ffmpeg_log;
 
@@ -85,7 +90,7 @@ bool VideoHelper::write_video(const std::vector<cv::Mat>& frames,
     // In POSIX, pclose returns the exit status of the shell. 
     // A non-zero return code means FFmpeg failed or crashed.
     if (returnCode != 0) {
-        // Match Python: read and log stderr output on failure
+        // Read and log stderr output on failure
         std::string ffmpeg_err;
         if (FILE* ferr = std::fopen(ffmpeg_log.c_str(), "r")) {
             char buf[256];
@@ -102,6 +107,7 @@ bool VideoHelper::write_video(const std::vector<cv::Mat>& frames,
     return true;
 }
 
+// Overload: accepts pre-encoded JPEG bytes — no re-encode needed, just pipe to FFmpeg or fallback to OpenCV if pipe fails.
 bool VideoHelper::write_video(const std::vector<std::vector<uchar>>& jpeg_frames,
                               const std::string& output_path,
                               int fps)
@@ -111,7 +117,7 @@ bool VideoHelper::write_video(const std::vector<std::vector<uchar>>& jpeg_frames
         return false;
     }
 
-    // Match Python: os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    // Create output directory if it doesn't exist
     try {
         auto parent = std::filesystem::path(output_path).parent_path();
         if (!parent.empty()) std::filesystem::create_directories(parent);
@@ -119,6 +125,7 @@ bool VideoHelper::write_video(const std::vector<std::vector<uchar>>& jpeg_frames
         app::utils::Logger::warning(std::string("[VideoHelper] Could not create output directory: ") + e.what());
     }
 
+    // Redirect stderr to a temp file so we can log FFmpeg errors on failure
     std::string ffmpeg_log2 = output_path + ".ffmpeg_stderr.tmp";
     std::string stderr_redirect = " 2>" + ffmpeg_log2;
 
@@ -140,12 +147,14 @@ bool VideoHelper::write_video(const std::vector<std::vector<uchar>>& jpeg_frames
             app::utils::Logger::error("[VideoHelper] Could not decode any frame for OpenCV fallback.");
             return false;
         }
+        // --- OpenCV Fallback Implementation ---
         int fourcc = cv::VideoWriter::fourcc('a', 'v', 'c', '1');
         cv::VideoWriter writer(output_path, cv::CAP_FFMPEG, fourcc, (double)fps, first.size());
         if (!writer.isOpened()) {
             app::utils::Logger::error("[VideoHelper] OpenCV VideoWriter fallback also failed.");
             return false;
         }
+        // Write pre-encoded JPEG frames to the VideoWriter (decoding them first)
         for (const auto& jpg : jpeg_frames) {
             cv::Mat buf(1, static_cast<int>(jpg.size()), CV_8U, const_cast<uchar*>(jpg.data()));
             cv::Mat frame = cv::imdecode(buf, cv::IMREAD_COLOR);
@@ -161,6 +170,7 @@ bool VideoHelper::write_video(const std::vector<std::vector<uchar>>& jpeg_frames
     }
 
     int returnCode = PCLOSE(pipe);
+    // In POSIX, pclose returns the exit status of the shell. A non-zero return code means FFmpeg failed or crashed.
     if (returnCode != 0) {
         std::string ffmpeg_err;
         if (FILE* ferr = std::fopen(ffmpeg_log2.c_str(), "r")) {
