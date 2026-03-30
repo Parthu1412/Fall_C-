@@ -4,18 +4,21 @@
 
 #pragma once
 
-#include "../utils/message.hpp"
 #include <memory>
 #include <string>
 
+#include "../utils/message.hpp"
+
 namespace app::kafka {
 
-class KafkaProducer {
+class KafkaProducer
+{
 public:
     KafkaProducer();
     ~KafkaProducer();
 
-    /** Connects producer; retries AppConfig::max_retries on failure. Exits process if all fail (matches Python). */
+    /** Connects producer; retries AppConfig::max_retries on failure. Exits process if all fail
+     * (matches Python). */
     void start_with_retry();
     void stop();
 

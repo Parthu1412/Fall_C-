@@ -5,10 +5,10 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
-#include <unordered_map>
 #include <cstdint>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace app {
 namespace config {
@@ -25,7 +25,8 @@ struct CameraConfig {
  * Global configuration loaded from environment (and optional .env in cwd).
  * Singleton — first access loads values.
  */
-class AppConfig {
+class AppConfig
+{
 public:
     static AppConfig& getInstance();
 
@@ -46,7 +47,7 @@ public:
     int video_buffer_size = 75;
     int frames_before_detection = 30;
     int frames_after_detection = 45;
-    int fall_sample_interval = 15; // process 1 of every N incoming frames
+    int fall_sample_interval = 15;  // process 1 of every N incoming frames
 
     // Redis
     std::string redis_host = "localhost";
@@ -95,5 +96,5 @@ private:
     AppConfig() = default;
 };
 
-} // namespace config
-} // namespace app
+}  // namespace config
+}  // namespace app

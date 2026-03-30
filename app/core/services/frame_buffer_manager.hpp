@@ -6,18 +6,20 @@
 #pragma once
 
 #include <deque>
+#include <mutex>
+#include <opencv2/opencv.hpp>
+#include <optional>
 #include <unordered_map>
 #include <vector>
-#include <mutex>
-#include <optional>
-#include <opencv2/opencv.hpp>
+
 #include "../../config.hpp"
 
 namespace app {
 namespace core {
 namespace services {
 
-// Represents a completed fall detection result, including the annotated detection frame and associated video frames.
+// Represents a completed fall detection result, including the annotated detection frame and
+// associated video frames.
 struct DetectionResult {
     int camera_id = 0;
     int store_id = 0;
@@ -25,7 +27,8 @@ struct DetectionResult {
     std::vector<std::vector<uchar>> video_frames;  // JPEG bytes
 };
 
-// Internal struct to track pending detection info for a camera_id, including the annotated frame and buffers of frames before/after detection.
+// Internal struct to track pending detection info for a camera_id, including the annotated frame
+// and buffers of frames before/after detection.
 struct DetectionInfo {
     int store_id = 0;
     int buffer_size_at_detection = 0;
@@ -37,7 +40,8 @@ struct DetectionInfo {
     std::vector<std::vector<uchar>> frames_after_pending;     // JPEG bytes
 };
 
-class FrameBufferManager {
+class FrameBufferManager
+{
 public:
     FrameBufferManager();
 
@@ -60,11 +64,12 @@ public:
     int increment_processed_count(int camera_id);
 
     // Store detection info when fall is detected (only call when is_fall == true)
-    void handle_fall_detection(int camera_id, const cv::Mat& annotated_frame,
-                              int store_id, int processed_frame_num);
+    void handle_fall_detection(int camera_id, const cv::Mat& annotated_frame, int store_id,
+                               int processed_frame_num);
 
     void reset_camera(int camera_id);
-    void reset_camera_preserving_frames(int camera_id, const std::vector<std::vector<uchar>>& frames_to_preserve);
+    void reset_camera_preserving_frames(int camera_id,
+                                        const std::vector<std::vector<uchar>>& frames_to_preserve);
 
 private:
     // Core state mapped by camera_id
@@ -82,6 +87,6 @@ private:
     mutable std::mutex mtx_;
 };
 
-} // namespace services
-} // namespace core
-} // namespace app
+}  // namespace services
+}  // namespace core
+}  // namespace app

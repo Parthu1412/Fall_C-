@@ -6,19 +6,23 @@
 // Also provides imdecode_jpeg_message() and make_trace_id() utilities.
 
 #include "zmq_io.hpp"
-#include "../../utils/detection_json.hpp"
-#include "../../utils/logger.hpp"
+
 #include <chrono>
 #include <random>
 #include <sstream>
+
+#include "../../utils/detection_json.hpp"
+#include "../../utils/logger.hpp"
 
 namespace app::core::orchestrators {
 
 namespace {
 
 /** OpenCV imdecode expects InputArray; wrap raw JPEG bytes without copying. */
-cv::Mat imdecode_jpeg_message(const zmq::message_t& msg) {
-    if (msg.size() == 0) return {};
+cv::Mat imdecode_jpeg_message(const zmq::message_t& msg)
+{
+    if (msg.size() == 0)
+        return {};
     const int n = static_cast<int>(msg.size());
     // cppzmq: data() is const void*; cv::Mat(rows,cols,type,ptr) needs void*. imdecode reads only.
     void* bytes = const_cast<void*>(static_cast<const void*>(msg.data()));
@@ -27,10 +31,13 @@ cv::Mat imdecode_jpeg_message(const zmq::message_t& msg) {
 }
 
 // Convert between JSON keypoints and Redis/ZMQ format (3D vector of floats)
-void put_keypoints_json(nlohmann::json& j, const std::vector<std::vector<std::vector<float>>>& kpts) {
-    if (kpts.empty()) return;
+void put_keypoints_json(nlohmann::json& j, const std::vector<std::vector<std::vector<float>>>& kpts)
+{
+    if (kpts.empty())
+        return;
     nlohmann::json dets = nlohmann::json::array();
-    for (const auto& person : kpts) {
+    for (const auto& person : kpts)
+    {
         nlohmann::json det;
         det["keypoints"] = person;
         dets.push_back(det);
@@ -47,10 +54,13 @@ void json_to_redis_keypoints(const nlohmann::json& j,
     app::utils::parse_detections_keypoints(j, out);
 }
 
-// Send a frame packet over ZMQ: encode frame as JPEG, serialize metadata as JSON, send multipart message
-bool zmq_send_frame_packet(zmq::socket_t& sock, const ZmqFramePacket& p) {
+// Send a frame packet over ZMQ: encode frame as JPEG, serialize metadata as JSON, send multipart
+// message
+bool zmq_send_frame_packet(zmq::socket_t& sock, const ZmqFramePacket& p)
+{
     std::vector<uchar> jpg;
-    if (!cv::imencode(".jpg", p.frame, jpg)) {
+    if (!cv::imencode(".jpg", p.frame, jpg))
+    {
         app::utils::Logger::error("[zmq] imencode failed");
         return false;
     }
@@ -58,7 +68,8 @@ bool zmq_send_frame_packet(zmq::socket_t& sock, const ZmqFramePacket& p) {
     nlohmann::json meta;
     meta["camera_id"] = p.camera_id;
     meta["store_id"] = p.store_id;
-    if (!p.source_path.empty()) {
+    if (!p.source_path.empty())
+    {
         meta["source_path"] = p.source_path;
     }
     put_keypoints_json(meta, p.redis_keypoints);
@@ -68,40 +79,53 @@ bool zmq_send_frame_packet(zmq::socket_t& sock, const ZmqFramePacket& p) {
     zmq::message_t m1(jpg.size());
     memcpy(m1.data(), jpg.data(), jpg.size());
 
-    // Send multipart message: [meta JSON][JPEG bytes] with dontwait on first part to detect HWM full
-    try {
+    // Send multipart message: [meta JSON][JPEG bytes] with dontwait on first part to detect HWM
+    // full
+    try
+    {
         sock.send(m0, zmq::send_flags::sndmore | zmq::send_flags::dontwait);
         sock.send(m1, zmq::send_flags::none);
-    } catch (const zmq::error_t& e) {
-        if (e.num() == EAGAIN) return false;  // HWM full — caller warns and drops
+    } catch (const zmq::error_t& e)
+    {
+        if (e.num() == EAGAIN)
+            return false;  // HWM full — caller warns and drops
         // Fatal ZMQ error — re-throw so caller can exit(1)
         throw;
     }
     return true;
 }
 
-// Receive a frame packet from ZMQ: parse JSON metadata, decode JPEG frame, populate ZmqFramePacket struct
-bool zmq_recv_frame_packet(zmq::socket_t& sock, ZmqFramePacket& p, zmq::recv_flags flags) {
+// Receive a frame packet from ZMQ: parse JSON metadata, decode JPEG frame, populate ZmqFramePacket
+// struct
+bool zmq_recv_frame_packet(zmq::socket_t& sock, ZmqFramePacket& p, zmq::recv_flags flags)
+{
     zmq::message_t m0, m1;
     // Receive multipart message: [meta JSON][JPEG bytes]
-    try {
+    try
+    {
         auto r0 = sock.recv(m0, flags);
-        if (!r0) return false;
-        if (!sock.get(zmq::sockopt::rcvmore)) return false;
+        if (!r0)
+            return false;
+        if (!sock.get(zmq::sockopt::rcvmore))
+            return false;
         auto r1 = sock.recv(m1, zmq::recv_flags::none);
-        if (!r1) return false;
-    } catch (const zmq::error_t&) {
+        if (!r1)
+            return false;
+    } catch (const zmq::error_t&)
+    {
         return false;
     }
     // Parse JSON metadata and decode JPEG frame
-    try {
+    try
+    {
         std::string meta_s(static_cast<char*>(m0.data()), m0.size());
         auto j = nlohmann::json::parse(meta_s);
         p.camera_id = j.value("camera_id", 0);
         p.store_id = j.value("store_id", 0);
         p.source_path = j.value("source_path", std::string());
         json_to_redis_keypoints(j, p.redis_keypoints);
-    } catch (const std::exception& e) {
+    } catch (const std::exception& e)
+    {
         app::utils::Logger::error(std::string("[zmq] bad frame meta JSON: ") + e.what());
         return false;
     }
@@ -109,12 +133,14 @@ bool zmq_recv_frame_packet(zmq::socket_t& sock, ZmqFramePacket& p, zmq::recv_fla
     p.frame_jpg.assign(static_cast<const uchar*>(m1.data()),
                        static_cast<const uchar*>(m1.data()) + m1.size());
     p.frame = imdecode_jpeg_message(m1);
-    if (p.frame.empty()) return false;
+    if (p.frame.empty())
+        return false;
     return true;
 }
 
 // Generate a unique trace ID using current time and random number generator
-std::string make_trace_id() {
+std::string make_trace_id()
+{
     auto now = std::chrono::system_clock::now().time_since_epoch().count();
     thread_local std::mt19937_64 gen(std::random_device{}());
     std::stringstream ss;
@@ -122,11 +148,13 @@ std::string make_trace_id() {
     return ss.str();
 }
 
-bool zmq_send_video_task(zmq::socket_t& sock, const ZmqVideoTaskPacket& t) {
+bool zmq_send_video_task(zmq::socket_t& sock, const ZmqVideoTaskPacket& t)
+{
     // video_frames are already JPEG bytes — no encode needed
     std::vector<uchar> det_jpg;
     bool has_det = !t.detection_frame.empty();
-    if (has_det && !cv::imencode(".jpg", t.detection_frame, det_jpg)) {
+    if (has_det && !cv::imencode(".jpg", t.detection_frame, det_jpg))
+    {
         app::utils::Logger::error("[zmq] imencode detection frame failed");
         return false;
     }
@@ -136,51 +164,65 @@ bool zmq_send_video_task(zmq::socket_t& sock, const ZmqVideoTaskPacket& t) {
     meta["store_id"] = t.store_id;
     meta["has_detection"] = has_det;
     meta["n_frames"] = static_cast<int>(t.video_frames.size());
-    if (has_det) meta["det_len"] = static_cast<int>(det_jpg.size());
+    if (has_det)
+        meta["det_len"] = static_cast<int>(det_jpg.size());
     std::string meta_s = meta.dump();
-    // Send multipart message: [meta JSON][optional det JPEG][video frame JPEGs...] with dontwait on first part to detect HWM full
-    try {
+    // Send multipart message: [meta JSON][optional det JPEG][video frame JPEGs...] with dontwait on
+    // first part to detect HWM full
+    try
+    {
         zmq::message_t m(meta_s.size());
         memcpy(m.data(), meta_s.data(), meta_s.size());
         // dontwait on first part: EAGAIN = HWM full
         sock.send(m, zmq::send_flags::sndmore | zmq::send_flags::dontwait);
-        if (has_det) {
+        if (has_det)
+        {
             zmq::message_t md(det_jpg.size());
             memcpy(md.data(), det_jpg.data(), det_jpg.size());
             sock.send(md, zmq::send_flags::sndmore);
         }
         // Send each video frame as a separate message part
-        for (size_t i = 0; i < t.video_frames.size(); ++i) {
+        for (size_t i = 0; i < t.video_frames.size(); ++i)
+        {
             const auto& jpg = t.video_frames[i];
             zmq::message_t mf(jpg.size());
             memcpy(mf.data(), jpg.data(), jpg.size());
             bool last = (i + 1 == t.video_frames.size());
             sock.send(mf, last ? zmq::send_flags::none : zmq::send_flags::sndmore);
         }
-    } catch (const zmq::error_t& e) {
-        if (e.num() == EAGAIN) return false;  // HWM full — caller warns and drops
+    } catch (const zmq::error_t& e)
+    {
+        if (e.num() == EAGAIN)
+            return false;  // HWM full — caller warns and drops
         // Fatal ZMQ error — re-throw so caller can exit(1) (matches Python zmq.ZMQError → sys.exit)
         throw;
     }
     return true;
 }
 
-bool zmq_recv_video_task(zmq::socket_t& sock, ZmqVideoTaskPacket& t, zmq::recv_flags flags) { // Similar to zmq_recv_frame_packet but for video task packets with multiple video frame parts
+bool zmq_recv_video_task(zmq::socket_t& sock, ZmqVideoTaskPacket& t, zmq::recv_flags flags)
+{  // Similar to zmq_recv_frame_packet but for video task packets with multiple video frame parts
     zmq::message_t m0;
-    try {
+    try
+    {
         auto r0 = sock.recv(m0, flags);
-        if (!r0) return false;
-        if (!sock.get(zmq::sockopt::rcvmore)) return false;
-    } catch (const zmq::error_t&) {
+        if (!r0)
+            return false;
+        if (!sock.get(zmq::sockopt::rcvmore))
+            return false;
+    } catch (const zmq::error_t&)
+    {
         return false;
     }
 
     // Parse JSON metadata from first part
     std::string meta_s(static_cast<char*>(m0.data()), m0.size());
     nlohmann::json j;
-    try {
+    try
+    {
         j = nlohmann::json::parse(meta_s);
-    } catch (...) {
+    } catch (...)
+    {
         return false;
     }
     t.trace_id = j.value("trace_id", "");
@@ -190,30 +232,41 @@ bool zmq_recv_video_task(zmq::socket_t& sock, ZmqVideoTaskPacket& t, zmq::recv_f
     int n_frames = j.value("n_frames", 0);
 
     zmq::message_t chunk;
-    if (has_det) {
-        try {
-            if (!sock.recv(chunk, zmq::recv_flags::none)) return false;
-        } catch (const zmq::error_t&) {
+    if (has_det)
+    {
+        try
+        {
+            if (!sock.recv(chunk, zmq::recv_flags::none))
+                return false;
+        } catch (const zmq::error_t&)
+        {
             return false;
         }
         t.detection_frame = imdecode_jpeg_message(chunk);
-        if (n_frames > 0 && !sock.get(zmq::sockopt::rcvmore)) return false;
-    } else {
+        if (n_frames > 0 && !sock.get(zmq::sockopt::rcvmore))
+            return false;
+    } else
+    {
         t.detection_frame.release();
     }
 
     t.video_frames.clear();
     t.video_frames.reserve(n_frames);
-    for (int i = 0; i < n_frames; ++i) {
-        try {
-            if (!sock.recv(chunk, zmq::recv_flags::none)) return false;
-        } catch (const zmq::error_t&) {
+    for (int i = 0; i < n_frames; ++i)
+    {
+        try
+        {
+            if (!sock.recv(chunk, zmq::recv_flags::none))
+                return false;
+        } catch (const zmq::error_t&)
+        {
             return false;
         }
-        if (chunk.size() == 0) return false;
-        t.video_frames.push_back(std::vector<uchar>(
-            static_cast<const uchar*>(chunk.data()),
-            static_cast<const uchar*>(chunk.data()) + chunk.size()));
+        if (chunk.size() == 0)
+            return false;
+        t.video_frames.push_back(
+            std::vector<uchar>(static_cast<const uchar*>(chunk.data()),
+                               static_cast<const uchar*>(chunk.data()) + chunk.size()));
     }
     return true;
 }

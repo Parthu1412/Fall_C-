@@ -5,11 +5,11 @@
 
 #pragma once
 
-#include <zmq.hpp>
 #include <nlohmann/json.hpp>
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
+#include <zmq.hpp>
 
 namespace app::core::orchestrators {
 
@@ -17,7 +17,7 @@ struct ZmqFramePacket {
     int camera_id = 0;
     int store_id = 0;
     cv::Mat frame;
-    std::vector<uchar> frame_jpg;   // raw JPEG bytes — stored alongside Mat to avoid re-encode
+    std::vector<uchar> frame_jpg;  // raw JPEG bytes — stored alongside Mat to avoid re-encode
     /** Camera URL / video file path (for logs); optional in JSON. */
     std::string source_path;
     /** Populated when CLIENT_TYPE=redis JSON carries pose detections. */
@@ -40,7 +40,7 @@ struct ZmqVideoTaskPacket {
 
 bool zmq_send_video_task(zmq::socket_t& sock, const ZmqVideoTaskPacket& t);
 bool zmq_recv_video_task(zmq::socket_t& sock, ZmqVideoTaskPacket& t,
-                            zmq::recv_flags flags = zmq::recv_flags::dontwait);
+                         zmq::recv_flags flags = zmq::recv_flags::dontwait);
 
 std::string make_trace_id();
 

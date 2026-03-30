@@ -5,11 +5,11 @@
 
 #pragma once
 
-#include <opencv2/opencv.hpp>
 #include <atomic>
 #include <chrono>
 #include <deque>
 #include <mutex>
+#include <opencv2/opencv.hpp>
 #include <string>
 #include <thread>
 #include <vector>
@@ -22,7 +22,8 @@ namespace app::utils {
  * target_fps per second, buffers them. Caller's read() pops from the buffer.
  * Auto-reconnects if no frame received for 10 seconds.
  */
-class RTSPCamera {
+class RTSPCamera
+{
 public:
     explicit RTSPCamera(std::string url, int fps = 1, int buffer_size = 60);
     ~RTSPCamera();

@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <string>
 #include <nlohmann/json.hpp>
+#include <string>
 
 namespace app {
 namespace utils {
@@ -19,14 +19,9 @@ struct FallMessage {
     std::string timestamp;
 
     // This single line generates the equivalent of Python's to_dict() and json parsing
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(FallMessage, 
-                                   store_id, 
-                                   moksa_camera_id, 
-                                   s3_uri, 
-                                   video_uri, 
-                                   trace_id, 
-                                   timestamp)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(FallMessage, store_id, moksa_camera_id, s3_uri, video_uri,
+                                   trace_id, timestamp)
 };
 
-} // namespace utils
-} // namespace app
+}  // namespace utils
+}  // namespace app

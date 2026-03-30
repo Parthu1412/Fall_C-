@@ -4,12 +4,12 @@
 
 #include "config.hpp"
 
-#include <cstdlib>
-#include <fstream>
-#include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <fstream>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 
 namespace app {
@@ -17,30 +17,38 @@ namespace config {
 
 namespace {
 
-std::string trim(std::string s) {
+std::string trim(std::string s)
+{
     auto not_space = [](int ch) { return !std::isspace(ch); };
     s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
     s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
     return s;
 }
 
-void load_dotenv_file(const std::string& path) {
+void load_dotenv_file(const std::string& path)
+{
     std::ifstream in(path);
-    if (!in) return;
+    if (!in)
+        return;
     std::string line;
-    while (std::getline(in, line)) {
+    while (std::getline(in, line))
+    {
         line = trim(line);
-        if (line.empty() || line[0] == '#') continue;
+        if (line.empty() || line[0] == '#')
+            continue;
         auto eq = line.find('=');
-        if (eq == std::string::npos) continue;
+        if (eq == std::string::npos)
+            continue;
         std::string key = trim(line.substr(0, eq));
         std::string val = trim(line.substr(eq + 1));
-        if (!val.empty() && (val.front() == '"' || val.front() == '\'')) {
+        if (!val.empty() && (val.front() == '"' || val.front() == '\''))
+        {
             char q = val.front();
             if (val.size() >= 2 && val.back() == q)
                 val = val.substr(1, val.size() - 2);
         }
-        if (::getenv(key.c_str()) == nullptr) {
+        if (::getenv(key.c_str()) == nullptr)
+        {
 #ifdef _WIN32
             _putenv_s(key.c_str(), val.c_str());
 #else
@@ -50,60 +58,76 @@ void load_dotenv_file(const std::string& path) {
     }
 }
 
-int getenv_int(const char* k, int def) {
+int getenv_int(const char* k, int def)
+{
     const char* v = std::getenv(k);
-    if (!v || !*v) return def;
-    try {
+    if (!v || !*v)
+        return def;
+    try
+    {
         return std::stoi(v);
-    } catch (...) {
+    } catch (...)
+    {
         return def;
     }
 }
 
-float getenv_float(const char* k, float def) {
+float getenv_float(const char* k, float def)
+{
     const char* v = std::getenv(k);
-    if (!v || !*v) return def;
-    try {
+    if (!v || !*v)
+        return def;
+    try
+    {
         return std::stof(v);
-    } catch (...) {
+    } catch (...)
+    {
         return def;
     }
 }
 
-std::string getenv_str(const char* k, const std::string& def = {}) {
+std::string getenv_str(const char* k, const std::string& def = {})
+{
     const char* v = std::getenv(k);
     return v ? std::string(v) : def;
 }
 
-bool getenv_bool(const char* k, bool def) {
+bool getenv_bool(const char* k, bool def)
+{
     const char* v = std::getenv(k);
-    if (!v) return def;
+    if (!v)
+        return def;
     std::string s(v);
     std::transform(s.begin(), s.end(), s.begin(), ::tolower);
     return s == "1" || s == "true" || s == "yes";
 }
 
-std::vector<std::string> split_csv(const std::string& s) {
+std::vector<std::string> split_csv(const std::string& s)
+{
     std::vector<std::string> out;
     std::stringstream ss(s);
     std::string item;
-    while (std::getline(ss, item, ',')) {
+    while (std::getline(ss, item, ','))
+    {
         item = trim(item);
-        if (!item.empty()) out.push_back(item);
+        if (!item.empty())
+            out.push_back(item);
     }
     return out;
 }
 
-} // namespace
+}  // namespace
 
-AppConfig& AppConfig::getInstance() {
+AppConfig& AppConfig::getInstance()
+{
     static AppConfig inst;
     static std::once_flag once;
     std::call_once(once, [](AppConfig* self) { self->load(); }, &inst);
     return inst;
 }
 
-void AppConfig::load() {
+void AppConfig::load()
+{
     load_dotenv_file(".env");
 
     total_cameras = getenv_int("TOTAL_CAMERAS", 0);
@@ -125,10 +149,12 @@ void AppConfig::load() {
     redis_port = getenv_int("REDIS_PORT", 6379);
     redis_password = getenv_str("REDIS_PASSWORD", "");
     redis_expiry = getenv_int("REDIS_EXPIRY", 200);
-    try {
-        longint_max = static_cast<int64_t>(
-            std::stoll(getenv_str("LONGINT_MAX", "9223372036854775807")));
-    } catch (...) {
+    try
+    {
+        longint_max =
+            static_cast<int64_t>(std::stoll(getenv_str("LONGINT_MAX", "9223372036854775807")));
+    } catch (...)
+    {
         longint_max = 9223372036854775807LL;
     }
 
@@ -170,11 +196,14 @@ void AppConfig::load() {
     max_retries = getenv_int("MAX_RETRIES", 3);
 }
 
-std::unordered_map<int, CameraConfig> AppConfig::load_camera_configs() const {
+std::unordered_map<int, CameraConfig> AppConfig::load_camera_configs() const
+{
     std::unordered_map<int, CameraConfig> out;
-    if (total_cameras <= 0) return out;
+    if (total_cameras <= 0)
+        return out;
 
-    for (int i = 1; i <= total_cameras; ++i) {
+    for (int i = 1; i <= total_cameras; ++i)
+    {
         std::string suffix = "_" + std::to_string(i);
         CameraConfig c;
         c.id = getenv_int(("CAMERA_ID" + suffix).c_str(), i);
@@ -182,23 +211,27 @@ std::unordered_map<int, CameraConfig> AppConfig::load_camera_configs() const {
         c.websocket_url = getenv_str(("WEBSOCKET_URL" + suffix).c_str(), "");
         c.store_id = getenv_int(("STORE_ID" + suffix).c_str(), 0);
         c.client_type = client_type;
-        if (c.url.empty()) {
+        if (c.url.empty())
+        {
             // Match Python: log warning and skip cameras with no URL
             continue;
         }
         // Match Python CameraConfig.__post_init__ validation
         static const std::vector<std::string> valid_types = {"webrtc", "rtsp", "redis", "video"};
-        bool valid_type = std::find(valid_types.begin(), valid_types.end(), c.client_type) != valid_types.end();
+        bool valid_type =
+            std::find(valid_types.begin(), valid_types.end(), c.client_type) != valid_types.end();
         if (!valid_type)
-            throw std::runtime_error("Invalid client type '" + c.client_type + "' for camera " + std::to_string(c.id));
+            throw std::runtime_error("Invalid client type '" + c.client_type + "' for camera " +
+                                     std::to_string(c.id));
         if (!c.store_id)
             throw std::runtime_error("Store ID cannot be empty for camera " + std::to_string(c.id));
         if (c.client_type == "webrtc" && c.websocket_url.empty())
-            throw std::runtime_error("WebSocket URL required for WebRTC camera " + std::to_string(c.id) + " but not provided");
+            throw std::runtime_error("WebSocket URL required for WebRTC camera " +
+                                     std::to_string(c.id) + " but not provided");
         out[i] = c;
     }
     return out;
 }
 
-} // namespace config
-} // namespace app
+}  // namespace config
+}  // namespace app

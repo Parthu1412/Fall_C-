@@ -16,14 +16,16 @@ class PoseInference;
 
 namespace app::core::services {
 
-class FallDetectionService {
+class FallDetectionService
+{
 public:
     explicit FallDetectionService(bool annotate_image = true);
     ~FallDetectionService();
 
     /** @param redis_style_detections Optional poses from Redis (per person: 17×[x,y,conf]). */
-    std::pair<bool, cv::Mat> detect_fall(const cv::Mat& frame,
-                                         const std::vector<std::vector<std::vector<float>>>& redis_style_detections);
+    std::pair<bool, cv::Mat> detect_fall(
+        const cv::Mat& frame,
+        const std::vector<std::vector<std::vector<float>>>& redis_style_detections);
 
 private:
     bool annotate_image_ = true;

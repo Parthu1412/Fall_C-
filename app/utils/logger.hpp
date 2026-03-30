@@ -4,24 +4,21 @@
 
 #pragma once
 
-#include <iostream>
-#include <string>
-#include <sstream>
+#include <cstdlib>
 #include <ctime>
 #include <iomanip>
-#include <cstdlib>
+#include <iostream>
+#include <mutex>
+#include <sstream>
+#include <string>
 
 namespace app {
 namespace utils {
 
-enum class LogLevel {
-    DEBUG = 0,
-    INFO = 1,
-    WARNING = 2,
-    ERROR = 3
-};
+enum class LogLevel { DEBUG = 0, INFO = 1, WARNING = 2, ERROR = 3 };
 
-class Logger {
+class Logger
+{
 public:
     static void set_level(LogLevel level);
     static void set_level_from_env();  // Reads LOG_LEVEL from environment
@@ -38,5 +35,5 @@ private:
     static std::string level_to_string(LogLevel level);
 };
 
-} // namespace utils
-} // namespace app
+}  // namespace utils
+}  // namespace app
